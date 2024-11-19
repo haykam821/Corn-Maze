@@ -1,5 +1,7 @@
 package io.github.haykam821.cornmaze.game.map;
 
+import java.util.Set;
+
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -10,9 +12,9 @@ import net.minecraft.world.GameMode;
 import net.minecraft.world.gen.chunk.ChunkGenerator;
 import xyz.nucleoid.map_templates.BlockBounds;
 import xyz.nucleoid.map_templates.MapTemplate;
-import xyz.nucleoid.plasmid.game.player.PlayerOffer;
-import xyz.nucleoid.plasmid.game.player.PlayerOfferResult;
-import xyz.nucleoid.plasmid.game.world.generator.TemplateChunkGenerator;
+import xyz.nucleoid.plasmid.api.game.player.JoinAcceptor;
+import xyz.nucleoid.plasmid.api.game.player.JoinAcceptorResult;
+import xyz.nucleoid.plasmid.api.game.world.generator.TemplateChunkGenerator;
 
 public class CornMazeMap {
 	private final MapTemplate template;
@@ -52,13 +54,13 @@ public class CornMazeMap {
 	}
 
 	public void spawn(ServerPlayerEntity player, ServerWorld world) {
-		player.teleport(world, this.spawn.getX(), this.spawn.getY(), this.spawn.getZ(), this.spawnYaw, 0);
+		player.teleport(world, this.spawn.getX(), this.spawn.getY(), this.spawn.getZ(), Set.of(), this.spawnYaw, 0, true);
 	}
 
-	public PlayerOfferResult.Accept acceptOffer(PlayerOffer offer, ServerWorld world, GameMode gameMode) {
-		return offer.accept(world, this.spawn).and(() -> {
-			offer.player().changeGameMode(gameMode);
-			offer.player().setYaw(this.spawnYaw);
+	public JoinAcceptorResult acceptJoins(JoinAcceptor acceptor, ServerWorld world, GameMode gameMode) {
+		return acceptor.teleport(world, this.spawn).thenRunForEach(player -> {
+			player.changeGameMode(gameMode);
+			player.setYaw(this.spawnYaw);
 		});
 	}
 

@@ -14,19 +14,20 @@ import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
 import net.minecraft.text.Text;
-import net.minecraft.util.ActionResult;
 import net.minecraft.util.Formatting;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.GameMode;
-import xyz.nucleoid.plasmid.game.GameActivity;
-import xyz.nucleoid.plasmid.game.GameCloseReason;
-import xyz.nucleoid.plasmid.game.GameSpace;
-import xyz.nucleoid.plasmid.game.event.GameActivityEvents;
-import xyz.nucleoid.plasmid.game.event.GamePlayerEvents;
-import xyz.nucleoid.plasmid.game.player.PlayerOffer;
-import xyz.nucleoid.plasmid.game.player.PlayerOfferResult;
-import xyz.nucleoid.plasmid.game.rule.GameRuleType;
-import xyz.nucleoid.plasmid.util.PlayerRef;
+import xyz.nucleoid.plasmid.api.game.GameActivity;
+import xyz.nucleoid.plasmid.api.game.GameCloseReason;
+import xyz.nucleoid.plasmid.api.game.GameSpace;
+import xyz.nucleoid.plasmid.api.game.event.GameActivityEvents;
+import xyz.nucleoid.plasmid.api.game.event.GamePlayerEvents;
+import xyz.nucleoid.plasmid.api.game.player.JoinAcceptor;
+import xyz.nucleoid.plasmid.api.game.player.JoinAcceptorResult;
+import xyz.nucleoid.plasmid.api.game.player.JoinOffer;
+import xyz.nucleoid.plasmid.api.game.rule.GameRuleType;
+import xyz.nucleoid.plasmid.api.util.PlayerRef;
+import xyz.nucleoid.stimuli.event.EventResult;
 import xyz.nucleoid.stimuli.event.player.PlayerDeathEvent;
 
 public class CornMazeActivePhase {
@@ -61,7 +62,7 @@ public class CornMazeActivePhase {
 	}
 
 	public static void open(GameSpace gameSpace, ServerWorld world, CornMazeMap map, CornMazeConfig config) {
-		Set<PlayerRef> players = gameSpace.getPlayers().stream().map(PlayerRef::of).collect(Collectors.toSet());
+		Set<PlayerRef> players = gameSpace.getPlayers().participants().stream().map(PlayerRef::of).collect(Collectors.toSet());
 		CornMazeActivePhase phase = new CornMazeActivePhase(gameSpace, world, map, config, players);
 
 		gameSpace.setActivity(activity -> {
@@ -70,7 +71,8 @@ public class CornMazeActivePhase {
 			// Listeners
 			activity.listen(GameActivityEvents.ENABLE, phase::enable);
 			activity.listen(GameActivityEvents.TICK, phase::tick);
-			activity.listen(GamePlayerEvents.OFFER, phase::offerPlayer);
+			activity.listen(GamePlayerEvents.ACCEPT, phase::onAcceptPlayers);
+			activity.listen(GamePlayerEvents.OFFER, JoinOffer::acceptSpectators);
 			activity.listen(GamePlayerEvents.REMOVE, phase::removePlayer);
 			activity.listen(PlayerDeathEvent.EVENT, phase::onPlayerDeath);
 		});
@@ -81,6 +83,11 @@ public class CornMazeActivePhase {
 			playerRef.ifOnline(this.world, player -> {
 				player.changeGameMode(GameMode.ADVENTURE);
 			});
+		}
+
+		for (ServerPlayerEntity player : this.gameSpace.getPlayers().spectators()) {
+			this.map.spawn(player, this.world);
+			player.changeGameMode(GameMode.SPECTATOR);
 		}
 
 		for (BlockPos pos : this.map.getBarrierBounds()) {
@@ -120,17 +127,17 @@ public class CornMazeActivePhase {
 		return Text.translatable("text.cornmaze.win", winner.getDisplayName(), MINUTE_FORMAT.format(this.ticks / 20d / 60d)).formatted(Formatting.GOLD);
 	}
 
-	private PlayerOfferResult offerPlayer(PlayerOffer offer) {
-		return this.map.acceptOffer(offer, this.world, GameMode.SPECTATOR);
+	private JoinAcceptorResult onAcceptPlayers(JoinAcceptor acceptor) {
+		return this.map.acceptJoins(acceptor, this.world, GameMode.SPECTATOR);
 	}
 
 	private void removePlayer(ServerPlayerEntity player) {
 		this.players.remove(PlayerRef.of(player));
 	}
 
-	private ActionResult onPlayerDeath(ServerPlayerEntity player, DamageSource source) {
+	private EventResult onPlayerDeath(ServerPlayerEntity player, DamageSource source) {
 		this.map.spawn(player, this.world);
-		return ActionResult.FAIL;
+		return EventResult.DENY;
 	}
 
 	static {
