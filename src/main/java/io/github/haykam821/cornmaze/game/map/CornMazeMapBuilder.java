@@ -9,15 +9,26 @@ import it.unimi.dsi.fastutil.objects.Object2IntMap;
 import it.unimi.dsi.fastutil.objects.Object2IntOpenHashMap;
 import net.minecraft.block.BlockState;
 import net.minecraft.block.Blocks;
+import net.minecraft.block.LadderBlock;
+import net.minecraft.block.VineBlock;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.math.random.Random;
 import xyz.nucleoid.map_templates.BlockBounds;
 import xyz.nucleoid.map_templates.MapTemplate;
 
 public class CornMazeMapBuilder {
 	private static final BlockState BARRIER_STATE = Blocks.BARRIER.getDefaultState();
+	private static final BlockState SIDEWAYS_BARRIER_STATE = Blocks.BLACK_STAINED_GLASS.getDefaultState();
+
+	public static final BlockState LADDER_STATE = Blocks.LADDER.getDefaultState().with(LadderBlock.FACING, Direction.SOUTH);
+	private static final BlockState END_LADDER_STATE = Blocks.VINE.getDefaultState().with(VineBlock.NORTH, true);
+
 	public static final BlockState AIR_STATE = Blocks.AIR.getDefaultState();
+
+	private static final float VERTICAL_START_YAW = 180;
+	private static final float VERTICAL_START_PITCH = 20;
 
 	private final CornMazeConfig config;
 
@@ -29,7 +40,7 @@ public class CornMazeMapBuilder {
 		MapTemplate template = MapTemplate.createEmpty();
 		CornMazeMapConfig mapConfig = this.config.getMapConfig();
 
-		BlockBounds bounds = BlockBounds.of(BlockPos.ORIGIN, new BlockPos(mapConfig.getX() * mapConfig.getXScale() - 1, mapConfig.getHeight(), mapConfig.getZ() * mapConfig.getZScale() - 1));
+		BlockBounds bounds = this.getMazeBounds(mapConfig);
 
 		// Make maze 2D array with default walls
 		MazeState[][] maze = new MazeState[mapConfig.getZ()][mapConfig.getX()];
@@ -52,13 +63,27 @@ public class CornMazeMapBuilder {
 		this.build(bounds, template, mapConfig, maze, random);
 
 		Direction startDirection = this.getStartDirection(startX, startZ, maze);
+		Direction startFacingDirection = startDirection; 
+
+		BlockBounds startBounds = this.getBounds(startX, startZ, mapConfig);
+		Vec3d startPos = startBounds.centerBottom();
+
+		if (mapConfig.isSideways()) {
+			startFacingDirection = startFacingDirection.rotateClockwise(Direction.Axis.X);
+		} else {
+			startPos = startPos.offset(Direction.UP, 1);
+		}
+
+		float startYaw = getStartYaw(startFacingDirection);
+		float startPitch = getStartPitch(startFacingDirection);
+
 		BlockBounds barrierBounds = this.getBounds(startX + startDirection.getOffsetX(), startZ + startDirection.getOffsetZ(), mapConfig, true);
 
 		for (BlockPos pos : barrierBounds) {
-			template.setBlockState(pos, BARRIER_STATE);
+			template.setBlockState(pos, mapConfig.isSideways() ? SIDEWAYS_BARRIER_STATE : BARRIER_STATE);
 		}
 
-		return new CornMazeMap(template, bounds, this.getBounds(startX, startZ, mapConfig), this.getBounds(endCoordinate.getX(), endCoordinate.getZ(), mapConfig), barrierBounds, startDirection);
+		return new CornMazeMap(template, bounds, startBounds, this.getBounds(endCoordinate.getX(), endCoordinate.getZ(), mapConfig), barrierBounds, startPos, startYaw, startPitch);
 	}
 
 	private MazeCoordinate getFurthest(Object2IntOpenHashMap<MazeCoordinate> targets) {
@@ -79,10 +104,34 @@ public class CornMazeMapBuilder {
 		return maze[z][x];
 	}
 
+	private BlockBounds getMazeBounds(CornMazeMapConfig mapConfig) {
+		int x = mapConfig.getX() * mapConfig.getXScale() - 1;
+		int y = mapConfig.getHeight();
+		int z = mapConfig.getZ() * mapConfig.getZScale() - 1;
+
+		if (mapConfig.isSideways()) {
+			return BlockBounds.of(0, 0, 0, x, z, y);
+		}
+
+		return BlockBounds.of(0, 0, 0, x, y, z);
+	}
+
 	private BlockBounds getBounds(int x, int z, CornMazeMapConfig mapConfig, boolean inner) {
 		int shrinkY = inner ? 1 : 0;
-		BlockPos origin = new BlockPos(x * mapConfig.getXScale(), shrinkY, z * mapConfig.getZScale());
-		return BlockBounds.of(origin, origin.add(mapConfig.getXScale() - 1, mapConfig.getHeight() - shrinkY * 2, mapConfig.getZScale() - 1));
+
+		int startX = x * mapConfig.getXScale();
+		int startY = shrinkY;
+		int startZ = z * mapConfig.getZScale();
+
+		int endX = startX + (mapConfig.getXScale() - 1);
+		int endY = startY + (mapConfig.getHeight() - shrinkY * 2);
+		int endZ = startZ + (mapConfig.getZScale() - 1);
+
+		if (mapConfig.isSideways()) {
+			return BlockBounds.of(startX, startZ, startY, endX, endZ, endY);
+		}
+
+		return BlockBounds.of(startX, startY, startZ, endX, endY, endZ);
 	}
 
 	private BlockBounds getBounds(int x, int z, CornMazeMapConfig mapConfig) {
@@ -131,11 +180,17 @@ public class CornMazeMapBuilder {
 
 	private void build(BlockBounds bounds, MapTemplate template, CornMazeMapConfig mapConfig, MazeState[][] maze, Random random) {
 		for (BlockPos pos : bounds) {
-			MazeState state = this.getMazeState(pos.getX() / mapConfig.getXScale(), pos.getZ() / mapConfig.getZScale(), maze);
+			int x = pos.getX();
+			int y = mapConfig.isSideways() ? pos.getZ() : pos.getY();
+			int z = mapConfig.isSideways() ? pos.getY() : pos.getZ();
+
+			MazeState state = this.getMazeState(x / mapConfig.getXScale(), z / mapConfig.getZScale(), maze);
 			
-			if ((state.isTall() || pos.getY() == 0) && !this.isDecayed(state, mapConfig, random)) {
+			if ((state.isTall() || y == 0) && !this.isDecayed(state, mapConfig, random)) {
 				template.setBlockState(pos, state.getState());
-			} else if (pos.getY() == mapConfig.getHeight()) {
+			} else if (!state.isTall() && y == 1 && mapConfig.isSideways()) {
+				template.setBlockState(pos, state == MazeState.END ? END_LADDER_STATE : LADDER_STATE);
+			} else if (y == mapConfig.getHeight()) {
 				template.setBlockState(pos, BARRIER_STATE);
 			}
 		}
@@ -155,5 +210,13 @@ public class CornMazeMapBuilder {
 		}
 
 		return null;
+	}
+
+	private static float getStartYaw(Direction direction) {
+		return direction.getAxis().isVertical() ? VERTICAL_START_YAW : direction.asRotation();
+	}
+
+	private static float getStartPitch(Direction direction) {
+		return direction.getOffsetY() * -VERTICAL_START_PITCH;
 	}
 }

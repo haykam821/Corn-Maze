@@ -1,0 +1,17 @@
+{
+	"type": "cornmaze:corn_maze",
+	"icon": "minecraft:vine",
+	"map": {
+		"x": 32,
+		"z": 32,
+		"height": 4,
+		"x_scale": 3,
+		"z_scale": 3,
+		"sideways": true
+	},
+	"players": {
+		"min": 1,
+		"max": 64,
+		"threshold": 4
+	}
+}

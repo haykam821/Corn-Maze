@@ -10,6 +10,7 @@ import java.util.stream.Collectors;
 import io.github.haykam821.cornmaze.game.CornMazeConfig;
 import io.github.haykam821.cornmaze.game.map.CornMazeMap;
 import io.github.haykam821.cornmaze.game.map.CornMazeMapBuilder;
+import net.minecraft.block.BlockState;
 import net.minecraft.entity.damage.DamageSource;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.server.world.ServerWorld;
@@ -84,7 +85,10 @@ public class CornMazeActivePhase {
 		}
 
 		for (BlockPos pos : this.map.getBarrierBounds()) {
-			this.world.setBlockState(pos, CornMazeMapBuilder.AIR_STATE);
+			boolean ladder = this.config.getMapConfig().isSideways() && pos.getZ() == 1;
+			BlockState state = ladder ? CornMazeMapBuilder.LADDER_STATE : CornMazeMapBuilder.AIR_STATE;
+
+			this.world.setBlockState(pos, state);
 		}
 	}
 

@@ -1,5 +1,6 @@
 {
 	"game.cornmaze.decayed_corn_maze": "Decayed Corn Maze",
+	"game.cornmaze.sideways_corn_maze": "Sideways Corn Maze",
 	"game.cornmaze.standard_corn_maze": "Corn Maze",
 	"gameType.cornmaze.corn_maze": "Corn Maze",
 	"text.cornmaze.win": "%s found the exit in %s minutes!"
